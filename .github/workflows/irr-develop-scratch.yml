@@ -1,0 +1,54 @@
+# Unique name for this workflow
+name: Create scratch org and deploy on irr/develop
+
+# Run on merges/pushes to irr/develop (same convention as SIT)
+on:
+  push:
+    branches: [irr/develop]
+    paths:
+      - "sas-core/**"
+      - "scripts/create-org.sh"
+      - ".forceignore"
+  workflow_dispatch: {}
+
+jobs:
+  deploy-to-scratch:
+    runs-on: ubuntu-latest
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    steps:
+      - name: Install Salesforce CLI
+        run: npm install -g @salesforce/cli
+
+      - name: Install SFDX Data Move Utility (sfdmu)
+        run: echo y | sf plugins:install sfdmu
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # JWT cert is stored as a GitHub Secret (same convention as other workflows)
+      - name: Make JWT Key File
+        run: echo "${{ secrets.CI_KEY }}" > ./SF_JWT_KEY.key
+
+      - name: Authenticate to Dev Hub
+        run: |
+          sf org login jwt \
+            --username "${{ secrets.DEVHUB_USERNAME }}" \
+            --jwt-key-file ./SF_JWT_KEY.key \
+            --client-id "${{ secrets.DEVHUB_CLIENT_ID }}" \
+            --alias DevHub
+          sf config set target-dev-hub DevHub --global
+
+      - name: Create scratch org and prepare with project script
+        run: |
+          chmod +x scripts/create-org.sh
+          ./scripts/create-org.sh
+
+      - name: Deploy project to the created scratch org
+        run: |
+          sf project deploy start \
+            --target-org MyIRR \
+            --ignore-conflicts \
+            --concise
+
