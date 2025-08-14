@@ -49,10 +49,36 @@ jobs:
           chmod +x scripts/create-org.sh
           ./scripts/create-org.sh
 
-      - name: Deploy project to the created scratch org
+      # Optional: Second deploy is redundant because the script already deploys.
+      # Uncomment this block only if you want a safety net redeploy.
+      # - name: Deploy project to the created scratch org
+      #   run: |
+      #     sf project deploy start \
+      #       --target-org MyIRR \
+      #       --ignore-conflicts \
+      #       --concise
+
+      - name: Install jq (for parsing JSON)
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Summarize scratch org details (no secrets)
         run: |
-          sf project deploy start \
-            --target-org MyIRR \
-            --ignore-conflicts \
-            --concise
+          USERNAME=$(sf org display --target-org MyIRR --json | jq -r '.result.username')
+          INSTANCE=$(sf org display --target-org MyIRR --json | jq -r '.result.instanceUrl')
+          {
+            echo "Scratch org alias: MyIRR"
+            echo "Username: ${USERNAME}"
+            echo "Instance URL: ${INSTANCE}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Export scratch org SFDX auth URL (sensitive) and upload as artifact
+        run: |
+          sf org display --target-org MyIRR --verbose --json | jq -r '.result.sfdxAuthUrl' > myirr_sfdx_auth_url.txt
+        
+      - name: Upload auth URL artifact (expires in 1 day)
+        uses: actions/upload-artifact@v4
+        with:
+          name: myirr-sfdx-auth-url
+          path: myirr_sfdx_auth_url.txt
+          retention-days: 1
 
