@@ -27,17 +27,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      # JWT cert is stored as a GitHub Secret (same convention as other workflows)
-      - name: Make JWT Key File
-        run: echo "${{ secrets.CI_KEY }}" > ./SF_JWT_KEY.key
-
-      - name: Authenticate to Dev Hub
+      - name: Authenticate to Dev Hub (SFDX URL preferred; fallback to JWT)
         run: |
-          sf org login jwt \
-            --username "${{ secrets.DEVHUB_USERNAME }}" \
-            --jwt-key-file ./SF_JWT_KEY.key \
-            --client-id "${{ secrets.DEVHUB_CLIENT_ID }}" \
-            --alias DevHub
+          if [ -n "${{ secrets.SFDX_AUTH_URL }}" ]; then
+            echo "Using SFDX Auth URL secret for Dev Hub auth"
+            echo "${{ secrets.SFDX_AUTH_URL }}" > ./sfdx-auth-url.txt
+            sf org login sfdx-url --sfdx-url-file ./sfdx-auth-url.txt --alias DevHub
+          else
+            echo "SFDX_AUTH_URL not set; falling back to JWT auth"
+            echo "${{ secrets.CI_KEY }}" > ./SF_JWT_KEY.key
+            sf org login jwt \
+              --username "${{ secrets.DEVHUB_USERNAME }}" \
+              --jwt-key-file ./SF_JWT_KEY.key \
+              --client-id "${{ secrets.DEVHUB_CLIENT_ID }}" \
+              --alias DevHub
+          fi
           sf config set target-dev-hub DevHub --global
 
       - name: Create scratch org and prepare with project script
